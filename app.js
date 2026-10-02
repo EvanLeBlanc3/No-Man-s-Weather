@@ -14,7 +14,7 @@ const LS = {
 const settings = Object.assign({ auto: true, units: 'F', sound: true, ambient: true, fx: true, manual: null }, LS.get('settings', {}));
 const saveSettings = () => LS.set('settings', settings);
 const CFG_DEF = { drones: true, droneCount: 2, attack: 'rare', aggro: 'normal', tough: 'normal', scanTrav: 'some', reinforce: 'normal',
-  tScan: 'normal', tMine: 'normal', tMineSpd: 'normal', tFire: 'normal', tAim: 'normal', tWalk: 'normal', tHop: 'normal', suit: 'orange', orb: true };
+  tScan: 'normal', tMine: 'normal', tMineSpd: 'normal', tFire: 'normal', tAim: 'normal', tWalk: 'normal', tHop: 'normal', suit: 'orange', orb: true, ship: true, sFreq: 'some', sPasses: 'medium', sFight: 'some', sMax: 0 };
 settings.cfg = Object.assign({}, CFG_DEF, settings.cfg || {});
 const CF = () => settings.cfg;
 const CFV = {
@@ -30,6 +30,9 @@ const CFV = {
   tAim: { wild: 13, normal: 7, sniper: 1.5 },
   tWalk: { stroll: .6, normal: 1, jog: 1.6 },
   tHop: { off: null, rare: [25, 45], normal: [9, 16], often: [3, 6] },
+  sFreq: { never: null, rare: [360, 720], some: [150, 300], often: [60, 120], always: [12, 25] },
+  sPasses: { short: 1, medium: 3, long: 5, epic: 8 },
+  sFight: { off: 0, rare: .2, some: .5, always: 1 },
   suit: { orange: ['#e0782a', '#a04c1a', '#ffa45a'], white: ['#e8e6de', '#a3a39c', '#ffffff'], red: ['#c83a2e', '#7e2018', '#f06a5a'], green: ['#5aa04a', '#346a2a', '#8ad070'], purple: ['#8a5ac8', '#583a88', '#b48af0'], black: ['#3a3c44', '#22232a', '#5e6270'], gold: ['#d8a43a', '#8a6420', '#ffd27a'] }
 };
 document.addEventListener('touchstart', () => {}, { passive: true }); // enables :active on iOS
@@ -194,6 +197,12 @@ const Sfx = (() => {
     pscan() { tone(1200, .5, 'sine', .025, 2400); },
     zap() { tone(rnd(140, 180), .13, 'sawtooth', .022, rnd(110, 130)); },
     sentinel() { tone(520, .14, 'square', .035); tone(390, .2, 'square', .035, null, .15); },
+    takeoff() { noise(2.4, .14, 'lowpass', 600); tone(90, 2.4, 'sawtooth', .05, 320); },
+    boost() { noise(1, .18, 'bandpass', 900, 0, 1); tone(200, .9, 'sawtooth', .05, 900); },
+    flyby() { noise(1.2, .1, 'bandpass', 1200, 0, 1.2); tone(500, 1.2, 'sine', .04, 180); },
+    sgun() { tone(2000, .07, 'square', .03, 900); tone(1700, .07, 'square', .025, 700, .03); },
+    land() { noise(2, .12, 'lowpass', 500); tone(300, 2, 'sawtooth', .04, 80); },
+    canopy() { tone(400, .12, 'square', .04, 700); tone(700, .1, 'square', .04, null, .12); },
     pew() { tone(1500, .09, 'square', .03, 500); },
     dlaser() { tone(900, .25, 'sawtooth', .035, 200); },
     hit() { noise(.08, .1, 'bandpass', 2500, 0, 2); },
@@ -358,7 +367,7 @@ const Scene = (() => {
       branch(x, y, a, rnd(6, 20), 2);
     }
   }
-  function build() { computePal(); buildSky(); buildTerrain(); makeStars(); makeFlora(); makeClouds(); buildFog(); buildFrost(); buildFreighter(); setupDeposits(); setupDrones(); }
+  function build() { computePal(); buildSky(); buildTerrain(); makeStars(); makeFlora(); makeClouds(); buildFog(); buildFrost(); buildFreighter(); buildShip(); shipInit(); setupDeposits(); setupDrones(); }
   function resize() {
     const r = innerWidth / Math.max(1, innerHeight); W = 180; H = Math.max(220, Math.round(W / r));
     cv.width = W; cv.height = H; HY = Math.round(H * .36); buf = mk(W, H); bx = buf.getContext('2d');
@@ -575,12 +584,13 @@ const Scene = (() => {
     const tr = TRV; tr.flinch = Math.max(0, tr.flinch - dt); tr.shield = Math.max(0, tr.shield - dt); tr.busted = Math.max(0, tr.busted - dt);
     deposits.forEach(d => { d.tag = Math.max(0, d.tag - dt); d.hit = Math.max(0, d.hit - dt); if (d.hp <= 0) { d.respawn -= dt; if (d.respawn <= 0) spawnDeposit(d); } });
     if (scanRing >= 0) { scanRing += dt; const r = scanRing * 120; deposits.forEach(d => { if (d.hp > 0 && d.tag <= 0 && Math.abs(d.x - tr.x) < r) { d.tag = 7; listener && listener('tick'); } }); if (scanRing > 1.3) scanRing = -1; }
-    if (type === 'tornado') { // flee, then brace
+    if (type === 'tornado' && !(tr.st === 'pilot')) { if (tr.st === 'toShip' || tr.st === 'board') tr.st = 'idle'; // flee, then brace
       const dist = Math.abs(tr.x - tornadoX), away = tr.x < tornadoX ? -1 : 1;
       if (dist < 55 && ((away < 0 && tr.x > 16) || (away > 0 && tr.x < W - 16))) { tr.st = 'run'; tr.dir = away; tr.x += away * 26 * dt; tr.walkPh += dt * 16; }
       else { tr.st = 'brace'; tr.dir = tornadoX < tr.x ? -1 : 1; }
       tr.target = null; return;
     }
+    if (shipBusy() && SHP) { if (travShip(dt)) return; }
     if (tr.st === 'run' || tr.st === 'brace') { tr.st = 'idle'; tr.t = 1; }
     if (tr.st === 'fight') { if (combat.on) { travFight(dt); return; } tr.st = 'idle'; tr.t = 1; }
     if (tr.flinch > 0 || tr.busted > 0 || hop >= 0) return;
@@ -609,9 +619,11 @@ const Scene = (() => {
     }
   }
   function drawTraveller() {
+    if (TRV.st === 'pilot') return { x: TRV.x, y: FY() - 22 };
     const tr = TRV, S = 2, flip = tr.dir < 0, x0 = Math.round(tr.x) - 9, feet = FY();
     let hy = 0; if (hop >= 0) hy = Math.round(Math.sin(hop / 1.3 * Math.PI) * 18);
-    const crouch = (tr.flinch > 0 && tr.st !== 'fight') || tr.st === 'brace' ? 4 : 0, moving = tr.st === 'walk' || tr.st === 'run' || tr.st === 'fight';
+    if (tr.st === 'board') hy = Math.round((1 - tr.t / 1.1) * 14); else if (tr.st === 'exit') hy = Math.round(Math.max(0, tr.t - .2) / 1 * 14);
+    const crouch = (tr.flinch > 0 && tr.st !== 'fight') || tr.st === 'brace' ? 4 : 0, moving = tr.st === 'walk' || tr.st === 'run' || tr.st === 'fight' || tr.st === 'toShip';
     const jx = coldT() && Math.sin(T * 47) > .3 ? 1 : 0, lean = (type === 'wind' || type === 'tornado' ? 2 : 0) + (tr.st === 'run' ? tr.dir * 2 : 0);
     const stepUp = moving && Math.floor(tr.walkPh) % 2 ? 1 : 0, bob = moving ? -stepUp : Math.round(Math.sin(T * 2) * .8);
     const x = x0 + jx, y = feet - 14 * S + bob - hy + crouch;
@@ -627,7 +639,7 @@ const Scene = (() => {
     if (CF().orb) { const ox = (flip ? x - 2 : x + 17) + lean, oy = y + 7 + Math.round(Math.sin(T * 2.6)); R(ox, oy, 3, 3, PC.o); R(ox, oy, 3, 1, PC.h); R(ox + (flip ? 0 : 2), oy + 1, 1, 1, '#5ff0ff'); R(ox + 1, oy + 3, 1, 1, PC.O); }
     const lamp = night || type === 'fog';
     if (lamp) { const lx = flip ? x + 2 : x + 15; R(lx + lean, y + 3, 1, 1, '#ffffff'); g.fillStyle = 'rgba(255,220,150,.10)'; const hx = lx + lean; g.beginPath(); g.moveTo(hx, y + 6); g.lineTo(hx + tr.dir * 46, y + 26); g.lineTo(hx + tr.dir * 46, y - 8); g.fill(); }
-    if (hop >= 0) { for (let k = 0; k < 4 + (frame % 3); k++) { const c = k < 2 ? '#ffe14a' : '#ff6a1a'; R(x + 2, y + 20 + k * 2, 2, 2, c); R(x + 14, y + 20 + k * 2, 2, 2, c); } }
+    if (hop >= 0 || tr.st === 'board' || tr.st === 'exit') { for (let k = 0; k < 4 + (frame % 3); k++) { const c = k < 2 ? '#ffe14a' : '#ff6a1a'; R(x + 2, y + 20 + k * 2, 2, 2, c); R(x + 14, y + 20 + k * 2, 2, 2, c); } }
     // multitool + laser
     let tipX = 0, tipY = 0;
     if (tool) {
@@ -644,7 +656,7 @@ const Scene = (() => {
       R(tipX - 1, tipY - 1, 3, 3, 'rgba(255,240,180,.9)');
     }
     // umbrella in back hand
-    if (wetT() || type === 'tornado') {
+    if ((wetT() || type === 'tornado') && tr.st !== 'board' && tr.st !== 'exit') {
       const ux = (flip ? x + 16 : x + 1) + lean, uy = y - 6, inv = (type === 'storm' || type === 'tornado' || type === 'hail') && Math.sin(T * 2.2) > .5;
       R(ux, uy, 1, 20, '#2a2a2a'); R(ux - 2, uy + 19, 2, 1, '#2a2a2a');
       for (let dx = -12; dx <= 12; dx++) {
@@ -686,7 +698,7 @@ const Scene = (() => {
   rollAttack();
   function setupDrones() { if (!CF().drones) return; if (drn.length) { drn.forEach(d => { d.x = clamp(d.x, -20, W + 20); d.y = clamp(d.y, HY - 70, HY + 10); }); return; } if (respawnT > 0) return; for (let i = 0; i < CF().droneCount; i++) drn.push(makeDrone(false, i)); }
   function startAttack() {
-    if (combat.on || drn.length < 1 || type === 'tornado') return false;
+    if (combat.on || drn.length < 1 || type === 'tornado' || shipBusy()) return false;
     combat = { on: true, phase: 'alert', t: 1.4 }; drn.forEach(d => { d.st = 'hostile'; d.scan = null; d.leave = false; d.hp = CFV.tough[CF().tough]; d.cd = rnd(.8, 1.6); d.t = 0; });
     TRV.st = 'fight'; TRV.target = null; TRV.cd = .6; hop = -1; listener && listener('attack'); return true;
   }
@@ -705,7 +717,7 @@ const Scene = (() => {
       else if (active.length < cf.droneCount) { for (let i = active.length; i < cf.droneCount; i++) drn.push(makeDrone(true, i)); }
       else if (active.length > cf.droneCount) active.slice(cf.droneCount).forEach(d => { d.leave = d.x < W / 2 ? -1 : 1; d.st = 'fly'; d.scan = null; });
     }
-    if (cf.drones && !combat.on && drn.some(d => !d.leave) && type !== 'tornado') { nextAttack -= dt; if (nextAttack <= 0) { rollAttack(); if (TRV.st !== 'run' && hop < 0) startAttack(); } }
+    if (cf.drones && !combat.on && drn.some(d => !d.leave) && type !== 'tornado') { nextAttack -= dt; if (nextAttack <= 0) { rollAttack(); if (TRV.st !== 'run' && hop < 0 && !shipBusy()) startAttack(); } }
     if (combat.on && type === 'tornado') { combat.on = false; drn.forEach(newDroneTarget); TRV.st = 'idle'; TRV.t = 1; }
     if (combat.on) { combat.t -= dt; if (combat.phase === 'alert' && combat.t <= 0) combat.phase = 'fight'; }
     for (const d of drn) {
@@ -722,7 +734,7 @@ const Scene = (() => {
         const dx = d.tx - d.x, dy = d.ty - d.y, dist = Math.hypot(dx, dy) || 1, sp = 16;
         if (dist < 3 || d.t <= 0) {
           d.st = 'scan'; d.t = rnd(2.2, 3.6); const r = Math.random(), live = deposits.filter(o => o.hp > 0);
-          if (r < CFV.scanTrav[CF().scanTrav] && TRV.st !== 'fight' && !drn.some(o => o !== d && o.scan && o.scan.trav)) { d.scan = { trav: true }; TRV.busted = Math.max(TRV.busted, d.t * .8); listener && listener('sentinel'); }
+          if (r < CFV.scanTrav[CF().scanTrav] && TRV.st !== 'fight' && !shipBusy() && !drn.some(o => o !== d && o.scan && o.scan.trav)) { d.scan = { trav: true }; TRV.busted = Math.max(TRV.busted, d.t * .8); listener && listener('sentinel'); }
           else if (r < .55 && live.length) { const o = pick(live); d.scan = { x: o.x, y: FY() + o.dy - 4 }; }
           else if (r < .8 && flora.length) { const f = pick(flora); d.scan = { x: f.x, y: f.y - 4 }; }
           else d.scan = { x: clamp(d.x + rnd(-40, 40), 4, W - 4), y: rnd(HY + 10, HY + 50) };
@@ -736,8 +748,9 @@ const Scene = (() => {
     }
     // projectiles
     for (let i = shots.length - 1; i >= 0; i--) {
-      const s = shots[i]; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; let dead = s.life <= 0 || s.x < -10 || s.x > W + 10 || s.y > FY() + 6;
+      const s = shots[i]; s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt; let dead = s.life <= 0 || s.x < -10 || s.x > W + 10 || s.y > FY() + 6 || s.y < -10;
       if (s.from === 'd' && !dead && Math.abs(s.x - TRV.x) < 7 && Math.abs(s.y - (FY() - 14)) < 13) { dead = true; TRV.shield = .35; for (let k = 0; k < 5; k++) spark(s.x, s.y, rnd(-40, 40), rnd(-40, 20), .3, pick(['#5ff0ff', '#ffffff'])); listener && listener('shield'); }
+      if (s.from === 's' && !dead) for (const o of ships) if (!o.dead && s.x > o.x - 2 && s.x < o.x + 13 && Math.abs(s.y - (o.y + 3)) < 5) { dead = true; o.hp = (o.hp ?? 3) - 1; for (let k = 0; k < 4; k++) spark(s.x, s.y, rnd(-40, 40), rnd(-40, 30), .3, pick(['#ffffff', '#7fe0ff'])); if (o.hp <= 0) { o.dead = true; KILLS++; explode({ x: o.x + 6, y: o.y + 3 }); listener && listener('kill'); } break; }
       if (s.from === 't' && !dead) for (const d of drn) if (d.hp > 0 && Math.abs(s.x - d.x) < 9 && Math.abs(s.y - d.y) < 7) { dead = true; d.hp--; d.hit = .12; d.vx += Math.sign(s.vx) * 14; for (let k = 0; k < 6; k++) spark(s.x, s.y, rnd(-50, 50), rnd(-50, 20), .35, pick(['#fff2a0', '#ffb020', '#e0601e'])); listener && listener('hit'); if (d.hp <= 0) explode(d); break; }
       if (dead) shots.splice(i, 1);
     }
@@ -756,7 +769,7 @@ const Scene = (() => {
   }
   function drawShots() {
     for (const s of shots) {
-      const l = Math.hypot(s.vx, s.vy), ux = s.vx / l, uy = s.vy / l, n = s.from === 't' ? 5 : 6, glow = s.from === 't' ? 'rgba(255,220,80,.4)' : 'rgba(255,40,40,.45)', core = s.from === 't' ? '#fff7c0' : '#ff6a6a';
+      const l = Math.hypot(s.vx, s.vy), ux = s.vx / l, uy = s.vy / l, n = s.from === 's' ? 9 : s.from === 't' ? 5 : 6, glow = s.from === 's' ? 'rgba(80,160,255,.45)' : s.from === 't' ? 'rgba(255,220,80,.4)' : 'rgba(255,40,40,.45)', core = s.from === 's' ? '#9fe8ff' : s.from === 't' ? '#fff7c0' : '#ff6a6a';
       for (let k = 0; k < n; k++) { R(s.x - ux * k, s.y - uy * k - 1, 1, 3, glow); R(s.x - ux * k, s.y - uy * k, 1, 1, k < 2 ? '#ffffff' : core); }
     }
     if (TRV.muzzle > 0) { const mx = TRV.x + (TRV.dir < 0 ? -17 : 17), my = FY() - 15; R(mx - 2, my, 5, 1, '#fff7c0'); R(mx, my - 2, 1, 5, '#fff7c0'); R(mx - 1, my - 1, 3, 3, '#ffffff'); }
@@ -783,6 +796,111 @@ const Scene = (() => {
         R(tx - 6 + sw, Math.round(ty - 6 + ((T * 18) % (red ? 22 : 10))), 13, 1, `rgba(${col},.85)`);
       }
     }
+  }
+  /* ===== THE TRAVELLER'S STARSHIP (red/cream fighter) ===== */
+  const SSPR = [
+    '.....................n..................',
+    '..rr.................n..................',
+    '..rcr................n..................',
+    '..rccr.........rrrrrrrr.................',
+    '...rccr........rkkkkrRr.................',
+    '...rcccr.......kemmekRr..gggggg.........',
+    '....rcccr......kmeemkRrgggGGgggg........',
+    '....rccccr.....kemmekRggggGgggggg.......',
+    '.....rcccr.....rkkkkrRcgggggggggggc.....',
+    '.....rccccrwwwwwwwwwwwwwwcccccccccccc...',
+    '......rcccccccccccccccccccccccrrcccccc..',
+    '.......rcccccCCrRRRRRrrccccccrcrccccyccm',
+    '....rrrrrrrcEEEEEEErRRCcccccccccccccccmm',
+    '..rrrrrrrrEEeeeeeEErRRCCCCCCCCCCCCCCCC..',
+    '.RRRRrrrrrEeexxxeeERRRkkkkkkkkkkkkkkkk..',
+    '.........EeexxxxxeekkkkkkkkkkkkkkkkkC...',
+    '..........EeexxxeeE.....................',
+    '...........EEeeeEE......................'];
+  const GEAR = ['.............k...............k..........', '............kkk.............kkk.........'];
+  const SW = 40, SH = SSPR.length;
+  let shipC = {}, SHP = null, flights = 0, KILLS = 0;
+  function buildShip() {
+    shipC = {};
+    for (const fly of [0, 1]) for (const fl of [0, 1]) {
+      const c = mk(SW, SH + 2), x = c.getContext('2d'), C = { c: '#e8dcc4', C: '#b8aa92', w: '#fff6e6', r: '#e8321e', R: '#a01c10', k: '#18181c', g: '#24222e', G: '#8a90b0', e: '#3a2a24', E: '#a0603a', y: '#ffd040', m: '#8a8a92', n: '#9a9aa0', x: fly ? '#7fe0ff' : '#2a2026' };
+      const rows = fly ? SSPR : SSPR.concat(GEAR);
+      rows.forEach((row, j) => { for (let i = 0; i < SW; i++) { const ch = row[i]; if (!ch || ch === '.') continue; x.fillStyle = (ch === 'x' || ch === 'y') && fly ? C[ch] : nc(C[ch]); x.fillRect(fl ? SW - 1 - i : i, j, 1, 1); } });
+      shipC[fly + '' + fl] = c;
+    }
+  }
+  const padX = () => Math.round(W * .17), padY = () => FY() - 2; // ship bottom rests here
+  function shipInit() { if (!SHP) SHP = { st: 'parked', x: padX(), y: padY(), dir: 1, t: 0, next: 0, passes: 0, vx: 0, vy: 0, canopy: 0, gun: 0, tgt: null, wait: 0 }; rollFlight(); }
+  function rollFlight() { const r = CFV.sFreq[CF().sFreq]; if (SHP) SHP.next = r ? rnd(r[0], r[1]) : Infinity; }
+  const inShip = () => SHP && !['parked'].includes(SHP.st) && TRV.st === 'pilot';
+  const shipBusy = () => TRV.st === 'toShip' || TRV.st === 'board' || TRV.st === 'pilot' || TRV.st === 'exit';
+  function wantFly() { return CF().ship && SHP && SHP.st === 'parked' && !combat.on && type !== 'tornado' && hop < 0 && ['idle', 'walk', 'scan'].includes(TRV.st) && (CF().sMax === 0 || flights < CF().sMax); }
+  function launchNow() { if (!CF().ship || !SHP || SHP.st !== 'parked' || combat.on || type === 'tornado' || shipBusy()) return false; TRV.st = 'toShip'; TRV.target = null; return true; }
+  function shipUpdate(dt) {
+    if (!SHP) shipInit(); const s = SHP, tr = TRV, gy = padY();
+    s.canopy = clamp(s.canopy + (s.st === 'parked' && (tr.st === 'board' || tr.st === 'exit') ? dt * 3 : -dt * 3), 0, 1);
+    if (!CF().ship) { if (tr.st === 'toShip') { tr.st = 'idle'; tr.t = 1; } if (s.st === 'parked' && !shipBusy()) return; }
+    if (s.st === 'parked') {
+      s.x = padX(); s.y = gy; s.dir = 1;
+      if (tr.st !== 'toShip' && tr.st !== 'board' && tr.st !== 'exit') { s.next -= dt; if (s.next <= 0) { rollFlight(); if (wantFly()) { tr.st = 'toShip'; tr.target = null; } } }
+      return;
+    }
+    const cruiseY = () => rnd(H * .07, HY - 46);
+    switch (s.st) {
+      case 'liftoff': s.t += dt; s.y = gy - Math.min(1, s.t / 2.2) ** 1.6 * 34; if (frame % 2 === 0) for (let k = 0; k < 3; k++) spark(s.x + rnd(10, 22), FY(), rnd(-50, 50), -rnd(4, 14), .7, pick(['#bbaa90', '#8a7a68', '#ffffff']), 30);
+        if (s.t > 2.4) { s.st = 'depart'; s.vx = 0; listener && listener('boost'); } break;
+      case 'depart': s.vx += s.dir * 120 * dt; s.vx = clamp(s.vx, -130, 130); s.y -= 14 * dt; s.x += s.vx * dt;
+        if (s.x > W + 50 || s.x < -SW - 50) { s.st = 'away'; s.wait = rnd(.8, 2.2); } break;
+      case 'away': s.wait -= dt; if (s.wait <= 0) {
+        if (s.passes > 0) { s.passes--; s.dir = Math.random() < .5 ? 1 : -1; s.x = s.dir > 0 ? -SW - 10 : W + 10; s.y = cruiseY(); s.base = s.y; s.vx = s.dir * rnd(55, 75); s.st = 'pass'; s.tgt = null; s.ph = rnd(0, 6);
+          if (Math.random() < CFV.sFight[CF().sFight]) { const prey = { x: s.dir > 0 ? -14 : W + 2, y: s.y + rnd(-10, 10), vx: s.dir * rnd(24, 32), vy: rnd(-3, 3), dir: s.dir, hp: 4, c: pick(['#d8dde3', '#f0c040', '#6ad0ff', '#9aff7a']) }; ships.push(prey); s.tgt = prey; s.x -= s.dir * 34; s.hunt = true; } else s.hunt = false;
+          listener && listener('flyby');
+        } else { s.dir = Math.random() < .5 ? 1 : -1; s.x = s.dir > 0 ? -SW - 10 : W + 10; s.y = HY - 50; s.st = 'approach'; }
+      } break;
+      case 'pass': {
+        s.x += s.vx * dt;
+        if (s.hunt) {
+          if (!s.tgt || s.tgt.dead || !ships.includes(s.tgt)) { s.tgt = ships.filter(o => !o.dead && o.dir === s.dir && (o.x - s.x) * s.dir > 0).sort((a, b) => Math.abs(a.x - s.x) - Math.abs(b.x - s.x))[0] || null; if (!s.tgt) { s.hunt = false; s.base = s.y; } }
+          if (s.tgt) { const want = s.tgt.vx + clamp((s.tgt.x - s.dir * 34 - s.x) * 1.6, -45, 45); s.x += (want - s.vx) * 0; s.vx += (want - s.vx) * dt * 3; s.y += clamp(s.tgt.y - 9 - s.y, -1, 1) * 28 * dt; s.gun -= dt;
+            if (s.gun <= 0 && (s.tgt.x - s.x) * s.dir > 0 && Math.abs(s.tgt.y - 9 - s.y) < 8 && s.tgt.x > W * .3 && s.tgt.x < W * .7 + 10) { s.gun = .3; const nx = s.x + (s.dir > 0 ? SW : 0), ny = s.y + 12, l = Math.hypot(s.tgt.x + 6 - nx, s.tgt.y + 3 - ny) || 1;
+              for (const off of [-1.5, 1.5]) shots.push({ x: nx, y: ny + off, vx: (s.tgt.x + 6 - nx) / l * 260, vy: (s.tgt.y + 3 - ny) / l * 260, life: 1.2, from: 's' }); listener && listener('sgun'); } }
+        } else { s.y = s.base + Math.sin(T * 1.4 + s.ph) * 6; s.vx += (s.dir * 65 - s.vx) * dt * 1.5; }
+        if (s.x > W + 60 || s.x < -SW - 60) { s.st = 'away'; s.wait = rnd(1, 3); }
+        break; }
+      case 'approach': { const tx = padX(), dx = tx - s.x; s.vx += (clamp(dx * 1.4, -80, 80) - s.vx) * dt * 1.8; s.x += s.vx * dt; s.y += ((gy - 30) - s.y) * dt * 1.2; if (Math.abs(s.vx) > 6) s.dir = s.vx > 0 ? 1 : -1;
+        if (Math.abs(dx) < 4 && Math.abs(s.vx) < 15) { s.st = 'descend'; s.t = 0; s.x = tx; listener && listener('landing'); } break; }
+      case 'descend': s.t += dt; s.dir = 1; s.y = (gy - 30) + Math.min(1, s.t / 2) ** .7 * 30; if (frame % 2 === 0) for (let k = 0; k < 3; k++) spark(s.x + rnd(10, 22), FY(), rnd(-50, 50), -rnd(4, 14), .7, pick(['#bbaa90', '#8a7a68', '#ffffff']), 30);
+        if (s.t >= 2) { s.y = gy; s.st = 'parked'; flights++; tr.st = 'exit'; tr.t = 1.2; tr.x = s.x + 26; tr.dir = 1; listener && listener('landed'); } break;
+    }
+  }
+  // Called from the Traveller state machine
+  function travShip(dt) {
+    const tr = TRV, s = SHP;
+    if (tr.st === 'toShip') {
+      const tx = s.x + 26, dx = tx - tr.x; if (Math.abs(dx) < 1.2) { tr.st = 'board'; tr.t = 1.1; listener && listener('canopy'); return true; }
+      tr.dir = dx < 0 ? -1 : 1; const st = Math.sign(dx) * Math.min(Math.abs(dx), 20 * CFV.tWalk[CF().tWalk] * dt); tr.x += st; tr.walkPh += Math.abs(st) * .55; return true;
+    }
+    if (tr.st === 'board') { tr.t -= dt; if (tr.t <= 0) { tr.st = 'pilot'; s.st = 'liftoff'; s.t = 0; s.passes = CFV.sPasses[CF().sPasses]; listener && listener('takeoff'); } return true; }
+    if (tr.st === 'pilot') return true;
+    if (tr.st === 'exit') { tr.t -= dt; if (tr.t <= 0) { tr.st = 'idle'; tr.t = rnd(.8, 1.6); } return true; }
+    return false;
+  }
+  function drawShip() {
+    if (!SHP) return; const s = SHP; if (!CF().ship && s.st === 'parked' && !shipBusy()) return;
+    const fly = s.st !== 'parked' && s.st !== 'descend' || (s.st === 'descend' && s.t < 1.5), fl = s.dir < 0 ? 1 : 0;
+    const x = Math.round(s.x), y = Math.round(s.y - SH - (fly ? 0 : 2) + (s.st === 'pass' || s.st === 'approach' ? Math.sin(T * 3) * .8 : 0));
+    g.fillStyle = 'rgba(0,0,0,.3)'; const sh = Math.max(0, 1 - (padY() - s.y) / 60); if (s.y > HY - 20) g.fillRect(x + 6, FY() - 1, Math.round(28 * sh), 2);
+    g.drawImage(shipC[(fly ? 1 : 0) + '' + fl], x, y);
+    // canopy hinge open
+    if (s.canopy > 0) { const cx = fl ? x + SW - 34 : x + 24, ch = Math.round(s.canopy * 4); g.fillStyle = nc('#24222e'); g.fillRect(cx, y + 5 - ch, 9, 3); g.fillStyle = 'rgba(138,144,176,.9)'; g.fillRect(cx + 2, y + 5 - ch, 3, 1); }
+    // pilot visible in cockpit while flying
+    if (TRV.st === 'pilot') { const px = fl ? x + SW - 30 : x + 27; R(px, y + 6, 3, 3, nc(CFV.suit[CF().suit][0])); R(px + (fl ? 0 : 1), y + 7, 2, 1, '#1c1730'); }
+    // thrusters
+    if (fly) { const ex = fl ? x + SW - 6 : x + 2, ey = y + 14, n = 6 + Math.round(Math.random() * 3) + (s.st === 'depart' || s.st === 'pass' ? 8 : 0);
+      for (let k = 0; k < n; k++) R(ex - (fl ? -k : k), ey + (k % 2), 1, 1, k < 2 ? '#ffffff' : k < 5 ? '#7fe0ff' : 'rgba(80,160,255,.5)');
+      if (s.st === 'liftoff' || s.st === 'descend') { const gx = x + 15; for (let k = 0; k < 5; k++) R(gx + rnd(-2, 2), y + SH + k, 3, 1, k < 2 ? '#ffffff' : 'rgba(127,224,255,.6)'); } }
+    // nav lights
+    if (Math.floor(T * 2) % 2) { R(fl ? x + SW - 3 : x + 2, y + 1, 1, 1, '#ff3030'); R(fl ? x + 1 : x + SW - 2, y + 12, 1, 1, '#30ff60'); }
   }
   function drawTornado() {
     const bxp = W * .3 + Math.sin(T * .35) * W * .14, by = HY + 14, top = H * .06, n = 36; tornadoX = bxp;
@@ -895,8 +1013,8 @@ const Scene = (() => {
     // ships
     nextShip -= dt;
     if (nextShip <= 0 && type !== 'tornado') { const dir = Math.random() < .5 ? 1 : -1; ships.push({ x: dir > 0 ? -14 : W + 14, y: rnd(H * .05, H * .3), vx: dir * rnd(35, 75), vy: rnd(-4, 4), dir, c: pick(['#d8dde3', '#f0c040', '#e04a3a', '#6ad0ff', '#9aff7a']) }); nextShip = rnd(4, 11); }
-    ships.forEach(s => { s.x += s.vx * dt; s.y += s.vy * dt; if (frame % 2 === 0) trail.push({ x: s.dir > 0 ? s.x : s.x + 11, y: s.y + 3, life: .7 }); });
-    ships = ships.filter(s => s.x > -30 && s.x < W + 30);
+    ships.forEach(s => { if (s.hp != null && s.hp < 3) s.vy = Math.sin(T * 5) * 18; s.x += s.vx * dt; s.y += s.vy * dt; if (frame % 2 === 0) trail.push({ x: s.dir > 0 ? s.x : s.x + 11, y: s.y + 3, life: .7 }); });
+    ships = ships.filter(s => !s.dead && s.x > -30 && s.x < W + 30);
     trail.forEach(t => t.life -= dt); trail = trail.filter(t => t.life > 0);
     nextFreighter -= dt;
     if (!freighter && nextFreighter <= 0 && !['storm', 'tornado', 'fog'].includes(type)) { freighter = { x: -FRW - 6, y: Math.round(H * rnd(.15, .22)), sh: null, shT: rnd(8, 20) }; }
@@ -909,7 +1027,7 @@ const Scene = (() => {
     else { nextHop -= dt; if (nextHop <= 0) { if (CFV.tHop[CF().tHop] && TRV.st === 'idle' && ['clear', 'partly', 'cloudy', 'heat', 'wind', 'cold'].includes(type)) { hop = 0; listener && listener('jet'); } const hr = CFV.tHop[CF().tHop]; nextHop = hr ? rnd(hr[0], hr[1]) : 5; } }
     if (coldT()) { breath -= dt; if (breath <= 0) { for (let k = 0; k < 4; k++) spark(TRV.x + TRV.dir * 4 + k * .6 * TRV.dir, FY() - 23, TRV.dir * rnd(6, 14), rnd(-4, 2), 1.1, '#fff', 0, 'br'); breath = rnd(1.8, 3); } }
     if ((type === 'heat' || type === 'fire') && Math.random() < dt * 1.6) spark(TRV.x + rnd(-5, 5), FY() - 27, rnd(-14, 14), -rnd(20, 35), .6, '#7fd0ff');
-    travUpdate(dt); droneUpdate(dt);
+    travUpdate(dt); shipUpdate(dt); droneUpdate(dt);
     foot.forEach(f => f.life -= dt); foot = foot.filter(f => f.life > 0);
     floaters.forEach(f => { f.life -= dt; f.y -= 10 * dt; }); floaters = floaters.filter(f => f.life > 0);
     nextBeam -= dt; if (nextBeam <= 0) { beam = 0; nextBeam = rnd(10, 18); } if (beam >= 0) { beam += dt; if (beam > 1.6) beam = -1; }
@@ -964,6 +1082,7 @@ const Scene = (() => {
     if (type === 'fire') { for (let x = 0; x < W; x++) { const h = Math.max(0, Math.round(6 + fbm(x * .15, T * 2.2) * 14 - 6 + Math.sin(x * .4 + T * 9) * 2)); for (let j = 0; j < h; j++) { const f = j / h; R(x, farY[x] - j + 2, 1, 1, f < .3 ? '#ffe680' : f < .6 ? '#ff9a1a' : f < .85 ? '#ff4a10' : '#a01808'); } } }
     for (const f of foot) R(f.x - 9, FY() + 1, 2, 1, `rgba(120,140,170,${Math.min(.6, f.life / 12)})`);
     drawDrones();
+    drawShip();
     for (const f of flora) drawFlora(f);
     for (const d of deposits) drawDeposit(d);
     if (scanRing >= 0) { const r = scanRing * 120, a = Math.max(0, 1 - scanRing / 1.3); for (let k = 0; k < 90; k++) { const an = k / 90 * Math.PI * 2; R(TRV.x + Math.cos(an) * r, FY() + Math.sin(an) * r * .12, 1, 1, `rgba(95,240,255,${a})`); } }
@@ -1000,7 +1119,7 @@ const Scene = (() => {
       type = o.type; night = o.night; inten = o.inten ?? inten; windMph = o.wind ?? windMph; tempF = o.temp ?? tempF; uv = o.uv ?? uv;
       if (changed) { build(); fresh = true; nextBolt = .8; const tg = targets(); for (const k in parts) if (!tg[k]) delete parts[k]; fx = []; }
     },
-    on(fn) { listener = fn; }, frame(fn) { onFrame = fn; }, fr() { freighter = { x: 20, y: Math.round(H * .17), sh: null, shT: 0 }; }, attack() { if (!CF().drones) return false; if (!drn.some(d => !d.leave)) { respawnT = 0; for (let i = 0; i < CF().droneCount; i++) drn.push(makeDrone(true, i)); } drn.forEach(d => d.leave = false); return startAttack(); }, rollAttack() { rollAttack(); }
+    on(fn) { listener = fn; }, frame(fn) { onFrame = fn; }, fr() { freighter = { x: 20, y: Math.round(H * .17), sh: null, shT: 0 }; }, attack() { if (!CF().drones) return false; if (!drn.some(d => !d.leave)) { respawnT = 0; for (let i = 0; i < CF().droneCount; i++) drn.push(makeDrone(true, i)); } drn.forEach(d => d.leave = false); return startAttack(); }, rollAttack() { rollAttack(); }, rollFlight() { rollFlight(); }, launch() { return launchNow(); }, dbg() { return [SHP && SHP.st, TRV.st, SHP && Math.round(SHP.x), SHP && Math.round(SHP.y), ships.length, shots.filter(s => s.from === 's').length, flights, 'k' + KILLS, SHP && SHP.tgt ? Math.round(SHP.tgt.x) + ',' + Math.round(SHP.tgt.y) : '-'].join(' '); }
   };
 })();
 
@@ -1059,6 +1178,14 @@ Scene.on((ev, a, b) => {
   else if (ev === 'sentinel') Sfx.sentinel();
   else if (ev === 'collect') collect(a, b);
   else if (ev === 'pew') Sfx.pew();
+  else if (ev === 'takeoff') { Sfx.takeoff(); toast('🚀 Traveller is taking the ship out for a spin!', 2400); }
+  else if (ev === 'boost') Sfx.boost();
+  else if (ev === 'flyby') Sfx.flyby();
+  else if (ev === 'sgun') Sfx.sgun();
+  else if (ev === 'kill') toast('💥 Target destroyed! +1 bragging right', 2000);
+  else if (ev === 'landing') Sfx.land();
+  else if (ev === 'canopy') Sfx.canopy();
+  else if (ev === 'landed') Sfx.canopy();
   else if (ev === 'dlaser') Sfx.dlaser();
   else if (ev === 'hit') Sfx.hit();
   else if (ev === 'shield') { Sfx.shield(); if (settings.fx && navigator.vibrate) navigator.vibrate(20); }
@@ -1474,21 +1601,30 @@ const CFG_UI = [
     ['tHop', 'Jetpack hops', '', [['off', 'OFF'], ['rare', 'RARE'], ['normal', 'NORMAL'], ['often', 'OFTEN']]],
     ['suit', 'Exosuit color', '', [['orange', 'ORANGE'], ['white', 'WHITE'], ['red', 'RED'], ['green', 'GREEN'], ['purple', 'PURPLE'], ['black', 'STEALTH'], ['gold', 'GOLD']]],
     ['orb', 'Companion orb', 'Little helper floating by his shoulder', [[true, 'ON'], [false, 'OFF']]]
+  ]],
+  ['STARSHIP', [
+    ['ship', 'Starship', 'Show the ship and let the Traveller fly it', [[true, 'ON'], [false, 'OFF']]],
+    ['sFreq', 'Flight frequency', 'How often he hops in and takes off', [['never', 'NEVER'], ['rare', 'RARE'], ['some', 'SOMETIMES'], ['often', 'OFTEN'], ['always', 'CONSTANT']]],
+    ['sPasses', 'Flight length', 'Fly-bys across the sky per trip', [['short', '1'], ['medium', '3'], ['long', '5'], ['epic', '8']]],
+    ['sFight', 'Dogfights', 'Chance he hunts other ships on a pass', [['off', 'OFF'], ['rare', 'RARE'], ['some', 'SOMETIMES'], ['always', 'ALWAYS']]],
+    ['sMax', 'Flight limit', 'Max flights each time the app is opened', [[0, 'NO LIMIT'], [1, '1'], [3, '3'], [5, '5']]]
   ]]
 ];
 function renderCfg() {
   const cf = CF();
   $('#cfgBody').innerHTML = CFG_UI.map(([title, rows]) => `<section class="panel"><h2>${title}</h2>${rows.map(([k, label, sub, opts]) =>
-    `<div class="cfg-row${k !== 'drones' && title.startsWith('SENT') && !cf.drones ? ' dim' : ''}"><div class="cfg-k">${label}</div>${sub ? `<div class="cfg-s">${sub}</div>` : ''}<div class="chips">${opts.map(([v, t]) =>
+    `<div class="cfg-row${(k !== 'drones' && title.startsWith('SENT') && !cf.drones) || (k !== 'ship' && title === 'STARSHIP' && !cf.ship) ? ' dim' : ''}"><div class="cfg-k">${label}</div>${sub ? `<div class="cfg-s">${sub}</div>` : ''}<div class="chips">${opts.map(([v, t]) =>
       `<button class="chip${cf[k] === v ? ' active' : ''}${k === 'suit' ? ' sw-' + v : ''}" data-k="${k}" data-v='${JSON.stringify(v)}'>${t}</button>`).join('')}</div></div>`).join('')}</section>`).join('')
-    + `<div class="btn-row" style="margin:0 12px"><button class="btn big" id="cfgAtk">⚔ TRIGGER ATTACK</button><button class="btn big" id="cfgReset">↺ DEFAULTS</button></div>`;
+    + `<div class="btn-row" style="margin:0 12px"><button class="btn big" id="cfgAtk">⚔ TRIGGER ATTACK</button><button class="btn big" id="cfgReset">↺ DEFAULTS</button></div><div style="margin:8px 12px 0"><button class="btn big" id="cfgFly" style="width:100%">🚀 LAUNCH SHIP NOW</button></div>`;
   $('#cfgBody').querySelectorAll('.chip').forEach(ch => tap(ch, () => {
     const k = ch.dataset.k, v = JSON.parse(ch.dataset.v); cf[k] = v; saveSettings(); Sfx.blip();
     if (k === 'attack') Scene.rollAttack();
+    if (k === 'sFreq') Scene.rollFlight();
     renderCfg();
   }));
   tap($('#cfgAtk'), () => { closeCfg(); setTimeout(() => { if (!Scene.attack()) toast(CF().drones ? 'Sentinels are busy (or a tornado is happening).' : 'Sentinels are turned OFF.'); }, 350); });
-  tap($('#cfgReset'), () => { settings.cfg = Object.assign({}, CFG_DEF); saveSettings(); Scene.rollAttack(); Sfx.toggle(true); renderCfg(); toast('Config restored to defaults.'); });
+  tap($('#cfgFly'), () => { closeCfg(); setTimeout(() => { if (!Scene.launch()) toast(CF().ship ? 'Ship is busy (already flying, fighting, or a tornado).' : 'Starship is turned OFF.'); }, 350); });
+  tap($('#cfgReset'), () => { settings.cfg = Object.assign({}, CFG_DEF); saveSettings(); Scene.rollAttack(); Scene.rollFlight(); Sfx.toggle(true); renderCfg(); toast('Config restored to defaults.'); });
 }
 function openCfg() { renderCfg(); $('#cfg').classList.add('open'); Sfx.whoosh(); }
 function closeCfg() { $('#cfg').classList.remove('open'); Sfx.blip(); }

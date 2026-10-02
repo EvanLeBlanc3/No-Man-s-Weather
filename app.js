@@ -322,7 +322,7 @@ const Scene = (() => {
     flora = [];
     for (let i = 0; i < 10; i++) {
       let x = Math.floor(rnd(3, W - 3)); const front = i > 6;
-      if (front && Math.abs(x - W * .74) < 20) x = (x + 50) % W;
+      if (front && x > W - 64) x = Math.floor(rnd(6, W - 70));
       flora.push({ x, y: front ? Math.round(rnd(HY + 16, HY + 44)) : nearY[x] + 1, s: front ? 2 : 1, k: Math.random(), ph: rnd(0, 6) });
     }
     flora.sort((a, b) => a.y - b.y);
@@ -620,9 +620,10 @@ const Scene = (() => {
   }
   function drawTraveller() {
     if (TRV.st === 'pilot') return { x: TRV.x, y: FY() - 22 };
+    const fadeA = TRV.st === 'board' ? clamp(TRV.t / .35, 0, 1) : TRV.st === 'exit' ? clamp((1.2 - TRV.t) / .35, 0, 1) : 1; g.globalAlpha = fadeA;
     const tr = TRV, S = 2, flip = tr.dir < 0, x0 = Math.round(tr.x) - 9, feet = FY();
     let hy = 0; if (hop >= 0) hy = Math.round(Math.sin(hop / 1.3 * Math.PI) * 18);
-    if (tr.st === 'board') hy = Math.round((1 - tr.t / 1.1) * 14); else if (tr.st === 'exit') hy = Math.round(Math.max(0, tr.t - .2) / 1 * 14);
+    if (tr.st === 'board') hy = Math.round((1 - tr.t / 1.1) * 30); else if (tr.st === 'exit') hy = Math.round(Math.max(0, tr.t - .2) * 30);
     const crouch = (tr.flinch > 0 && tr.st !== 'fight') || tr.st === 'brace' ? 4 : 0, moving = tr.st === 'walk' || tr.st === 'run' || tr.st === 'fight' || tr.st === 'toShip';
     const jx = coldT() && Math.sin(T * 47) > .3 ? 1 : 0, lean = (type === 'wind' || type === 'tornado' ? 2 : 0) + (tr.st === 'run' ? tr.dir * 2 : 0);
     const stepUp = moving && Math.floor(tr.walkPh) % 2 ? 1 : 0, bob = moving ? -stepUp : Math.round(Math.sin(T * 2) * .8);
@@ -666,6 +667,7 @@ const Scene = (() => {
       }
     }
     // reaction glyphs
+    g.globalAlpha = 1;
     if (tr.flinch > 0 && Math.floor(T * 8) % 2) ptext('!', tr.x, y - 10, '#ffe14a');
     if (tr.busted > 0) ptext('?', tr.x, y - 10 + Math.round(Math.sin(T * 6)), '#ff5a4a');
     if (tr.st === 'brace' && Math.floor(T * 4) % 2) ptext('!', tr.x, y - 10, '#ff5a4a');
@@ -799,37 +801,42 @@ const Scene = (() => {
   }
   /* ===== THE TRAVELLER'S STARSHIP (red/cream fighter) ===== */
   const SSPR = [
-    '.....................n..................',
-    '..rr.................n..................',
-    '..rcr................n..................',
-    '..rccr.........rrrrrrrr.................',
-    '...rccr........rkkkkrRr.................',
-    '...rcccr.......kemmekRr..gggggg.........',
-    '....rcccr......kmeemkRrgggGGgggg........',
-    '....rccccr.....kemmekRggggGgggggg.......',
-    '.....rcccr.....rkkkkrRcgggggggggggc.....',
-    '.....rccccrwwwwwwwwwwwwwwcccccccccccc...',
-    '......rcccccccccccccccccccccccrrcccccc..',
-    '.......rcccccCCrRRRRRrrccccccrcrccccyccm',
-    '....rrrrrrrcEEEEEEErRRCcccccccccccccccmm',
-    '..rrrrrrrrEEeeeeeEErRRCCCCCCCCCCCCCCCC..',
-    '.RRRRrrrrrEeexxxeeERRRkkkkkkkkkkkkkkkk..',
-    '.........EeexxxxxeekkkkkkkkkkkkkkkkkC...',
-    '..........EeexxxeeE.....................',
-    '...........EEeeeEE......................'];
-  const GEAR = ['.............k...............k..........', '............kkk.............kkk.........'];
-  const SW = 40, SH = SSPR.length;
+    '..h...........................................',
+    '..hr..................n.......................',
+    '..hwr.................n.......................',
+    '...hwcr...............n.......................',
+    '...hwccr.......hhhhhhhhrr.....................',
+    '....hwccr......hrrrrrrrrQ.....................',
+    '....hwcccr.....hjxxxxxjrQ...jjjjjj............',
+    '.....hwcccr....rxfgfgfxrQ.jjkKKkkkjj..........',
+    '.....hwccccr...rxgfFfgxrQjkKKkkkkkkkj.........',
+    '......hwcccCr..rxfgfgfxrQjkKkkkkkkkkkj........',
+    '......hwccccCr.rjxxxxxjRQjkkkkkkkkkkkkj.......',
+    '.......hwcccCCwwwwwwwwwwwwwwwwwwwwwwwwwww.....',
+    '.......hwcccCCcccccccccccccccccccccccccccww...',
+    '........rrrrrCCcchhhhcccccccchhchhcccccccccw..',
+    '.........rrrrrCCEEEEEEcccccccchhchhccccccccyw.',
+    '..hhhhhhrrrrrCEeeeeeeEECcccccccccccccccccccCmm',
+    '.hrrrrrrrrrrCEeEExxEEeECCCCCCCCCCCCCCCCCCCCCm.',
+    'hrrrrrrrrrrREeExpppxEeEDDDDDDDDDDDDDDDDDDDDD..',
+    '.QRRRRRRRRRREeExpPpxEeEQkkkkkkkkkkkkkkkkkkkk..',
+    '.......QQQQQEeEEppEEeEQ..kkkkkkkkkkkkkkkkkk...',
+    '.............EeeeeeeE.........................',
+    '..............EEEEEE..........................'];
+  const GEAR = ['..........................k.........k.........', '.........................kkk.......kkk........'];
+  const SW = 46, SH = SSPR.length;
   let shipC = {}, SHP = null, flights = 0, KILLS = 0;
   function buildShip() {
     shipC = {};
     for (const fly of [0, 1]) for (const fl of [0, 1]) {
-      const c = mk(SW, SH + 2), x = c.getContext('2d'), C = { c: '#e8dcc4', C: '#b8aa92', w: '#fff6e6', r: '#e8321e', R: '#a01c10', k: '#18181c', g: '#24222e', G: '#8a90b0', e: '#3a2a24', E: '#a0603a', y: '#ffd040', m: '#8a8a92', n: '#9a9aa0', x: fly ? '#7fe0ff' : '#2a2026' };
+      const c = mk(SW, SH + 2), x = c.getContext('2d'), C = { c: '#e8dcc4', w: '#fff8ea', C: '#bcae94', D: '#8a7e6a', h: '#ff6a50', r: '#e8321e', R: '#b0200f', Q: '#6e140a', k: '#16161c', K: '#9aa4c8', j: '#3a3a48', x: '#22202a', f: '#5a5a66', g: '#8a8a96', F: '#c8c8d0', E: '#c07a48', e: '#7a4a2a', p: fly ? '#d890ff' : '#4a2a5a', P: fly ? '#ffffff' : '#6a4a7a', y: '#ffd040', m: '#9a9aa2', n: '#a0a0a8' };
+      const haze = fly ? 0 : .14, glow = 'pPy';
       const rows = fly ? SSPR : SSPR.concat(GEAR);
-      rows.forEach((row, j) => { for (let i = 0; i < SW; i++) { const ch = row[i]; if (!ch || ch === '.') continue; x.fillStyle = (ch === 'x' || ch === 'y') && fly ? C[ch] : nc(C[ch]); x.fillRect(fl ? SW - 1 - i : i, j, 1, 1); } });
+      rows.forEach((row, j) => { for (let i = 0; i < SW; i++) { const ch = row[i]; if (!ch || ch === '.') continue; x.fillStyle = glow.includes(ch) && fly ? C[ch] : nc(haze ? mix(C[ch], P.sky[2], haze) : C[ch]); x.fillRect(fl ? SW - 1 - i : i, j, 1, 1); } });
       shipC[fly + '' + fl] = c;
     }
   }
-  const padX = () => Math.round(W * .17), padY = () => FY() - 2; // ship bottom rests here
+  const padX = () => W - SW - 8, padY = () => FY() - 14; // ship bottom rests here
   function shipInit() { if (!SHP) SHP = { st: 'parked', x: padX(), y: padY(), dir: 1, t: 0, next: 0, passes: 0, vx: 0, vy: 0, canopy: 0, gun: 0, tgt: null, wait: 0 }; rollFlight(); }
   function rollFlight() { const r = CFV.sFreq[CF().sFreq]; if (SHP) SHP.next = r ? rnd(r[0], r[1]) : Infinity; }
   const inShip = () => SHP && !['parked'].includes(SHP.st) && TRV.st === 'pilot';
@@ -847,7 +854,7 @@ const Scene = (() => {
     }
     const cruiseY = () => rnd(H * .07, HY - 46);
     switch (s.st) {
-      case 'liftoff': s.t += dt; s.y = gy - Math.min(1, s.t / 2.2) ** 1.6 * 34; if (frame % 2 === 0) for (let k = 0; k < 3; k++) spark(s.x + rnd(10, 22), FY(), rnd(-50, 50), -rnd(4, 14), .7, pick(['#bbaa90', '#8a7a68', '#ffffff']), 30);
+      case 'liftoff': s.t += dt; s.y = gy - Math.min(1, s.t / 2.2) ** 1.6 * 34; if (frame % 2 === 0) for (let k = 0; k < 3; k++) spark(s.x + rnd(12, 30), padY(), rnd(-50, 50), -rnd(4, 14), .7, pick(['#bbaa90', '#8a7a68', '#ffffff']), 30);
         if (s.t > 2.4) { s.st = 'depart'; s.vx = 0; listener && listener('boost'); } break;
       case 'depart': s.vx += s.dir * 120 * dt; s.vx = clamp(s.vx, -130, 130); s.y -= 14 * dt; s.x += s.vx * dt;
         if (s.x > W + 50 || s.x < -SW - 50) { s.st = 'away'; s.wait = rnd(.8, 2.2); } break;
@@ -862,22 +869,22 @@ const Scene = (() => {
         if (s.hunt) {
           if (!s.tgt || s.tgt.dead || !ships.includes(s.tgt)) { s.tgt = ships.filter(o => !o.dead && o.dir === s.dir && (o.x - s.x) * s.dir > 0).sort((a, b) => Math.abs(a.x - s.x) - Math.abs(b.x - s.x))[0] || null; if (!s.tgt) { s.hunt = false; s.base = s.y; } }
           if (s.tgt) { const want = s.tgt.vx + clamp((s.tgt.x - s.dir * 34 - s.x) * 1.6, -45, 45); s.x += (want - s.vx) * 0; s.vx += (want - s.vx) * dt * 3; s.y += clamp(s.tgt.y - 9 - s.y, -1, 1) * 28 * dt; s.gun -= dt;
-            if (s.gun <= 0 && (s.tgt.x - s.x) * s.dir > 0 && Math.abs(s.tgt.y - 9 - s.y) < 8 && s.tgt.x > W * .3 && s.tgt.x < W * .7 + 10) { s.gun = .3; const nx = s.x + (s.dir > 0 ? SW : 0), ny = s.y + 12, l = Math.hypot(s.tgt.x + 6 - nx, s.tgt.y + 3 - ny) || 1;
+            if (s.gun <= 0 && (s.tgt.x - s.x) * s.dir > 0 && Math.abs(s.tgt.y - 9 - s.y) < 8 && s.tgt.x > W * .3 && s.tgt.x < W * .7 + 10) { s.gun = .3; const nx = s.x + (s.dir > 0 ? SW : 0), ny = s.y - SH + 15, l = Math.hypot(s.tgt.x + 6 - nx, s.tgt.y + 3 - ny) || 1;
               for (const off of [-1.5, 1.5]) shots.push({ x: nx, y: ny + off, vx: (s.tgt.x + 6 - nx) / l * 260, vy: (s.tgt.y + 3 - ny) / l * 260, life: 1.2, from: 's' }); listener && listener('sgun'); } }
         } else { s.y = s.base + Math.sin(T * 1.4 + s.ph) * 6; s.vx += (s.dir * 65 - s.vx) * dt * 1.5; }
         if (s.x > W + 60 || s.x < -SW - 60) { s.st = 'away'; s.wait = rnd(1, 3); }
         break; }
       case 'approach': { const tx = padX(), dx = tx - s.x; s.vx += (clamp(dx * 1.4, -80, 80) - s.vx) * dt * 1.8; s.x += s.vx * dt; s.y += ((gy - 30) - s.y) * dt * 1.2; if (Math.abs(s.vx) > 6) s.dir = s.vx > 0 ? 1 : -1;
         if (Math.abs(dx) < 4 && Math.abs(s.vx) < 15) { s.st = 'descend'; s.t = 0; s.x = tx; listener && listener('landing'); } break; }
-      case 'descend': s.t += dt; s.dir = 1; s.y = (gy - 30) + Math.min(1, s.t / 2) ** .7 * 30; if (frame % 2 === 0) for (let k = 0; k < 3; k++) spark(s.x + rnd(10, 22), FY(), rnd(-50, 50), -rnd(4, 14), .7, pick(['#bbaa90', '#8a7a68', '#ffffff']), 30);
-        if (s.t >= 2) { s.y = gy; s.st = 'parked'; flights++; tr.st = 'exit'; tr.t = 1.2; tr.x = s.x + 26; tr.dir = 1; listener && listener('landed'); } break;
+      case 'descend': s.t += dt; s.dir = 1; s.y = (gy - 30) + Math.min(1, s.t / 2) ** .7 * 30; if (frame % 2 === 0) for (let k = 0; k < 3; k++) spark(s.x + rnd(12, 30), padY(), rnd(-50, 50), -rnd(4, 14), .7, pick(['#bbaa90', '#8a7a68', '#ffffff']), 30);
+        if (s.t >= 2) { s.y = gy; s.st = 'parked'; flights++; tr.st = 'exit'; tr.t = 1.2; tr.x = s.x + 30; tr.dir = -1; listener && listener('landed'); } break;
     }
   }
   // Called from the Traveller state machine
   function travShip(dt) {
     const tr = TRV, s = SHP;
     if (tr.st === 'toShip') {
-      const tx = s.x + 26, dx = tx - tr.x; if (Math.abs(dx) < 1.2) { tr.st = 'board'; tr.t = 1.1; listener && listener('canopy'); return true; }
+      const tx = s.x + 30, dx = tx - tr.x; if (Math.abs(dx) < 1.2) { tr.st = 'board'; tr.t = 1.1; listener && listener('canopy'); return true; }
       tr.dir = dx < 0 ? -1 : 1; const st = Math.sign(dx) * Math.min(Math.abs(dx), 20 * CFV.tWalk[CF().tWalk] * dt); tr.x += st; tr.walkPh += Math.abs(st) * .55; return true;
     }
     if (tr.st === 'board') { tr.t -= dt; if (tr.t <= 0) { tr.st = 'pilot'; s.st = 'liftoff'; s.t = 0; s.passes = CFV.sPasses[CF().sPasses]; listener && listener('takeoff'); } return true; }
@@ -887,20 +894,23 @@ const Scene = (() => {
   }
   function drawShip() {
     if (!SHP) return; const s = SHP; if (!CF().ship && s.st === 'parked' && !shipBusy()) return;
-    const fly = s.st !== 'parked' && s.st !== 'descend' || (s.st === 'descend' && s.t < 1.5), fl = s.dir < 0 ? 1 : 0;
+    const fly = s.st !== 'parked' && s.st !== 'descend' || (s.st === 'descend' && s.t < 1.5), fl = s.dir < 0 ? 1 : 0, X = i => fl ? SW - 1 - i : i;
     const x = Math.round(s.x), y = Math.round(s.y - SH - (fly ? 0 : 2) + (s.st === 'pass' || s.st === 'approach' ? Math.sin(T * 3) * .8 : 0));
-    g.fillStyle = 'rgba(0,0,0,.3)'; const sh = Math.max(0, 1 - (padY() - s.y) / 60); if (s.y > HY - 20) g.fillRect(x + 6, FY() - 1, Math.round(28 * sh), 2);
+    // ground shadow on the pad
+    const sh = clamp(1 - (padY() - s.y) / 60, 0, 1); if (sh > 0) { g.fillStyle = `rgba(0,0,0,${.32 * sh})`; g.fillRect(x + 8, padY() + 1, Math.round(34 * sh), 2); g.fillRect(x + 12, padY() + 3, Math.round(24 * sh), 1); }
+    // engine exhaust (behind sprite)
+    if (fly) { const ey = y + 16, boost = s.st === 'depart' || s.st === 'pass', n = 7 + Math.round(Math.random() * 3) + (boost ? 10 : 0), ex = x + X(0);
+      for (let k = 0; k < n; k++) { const xx = fl ? ex + 1 + k : ex - 1 - k; R(xx, ey, 1, 2, k < 2 ? '#ffffff' : k < 6 ? '#d890ff' : 'rgba(150,90,255,.45)'); }
+      g.fillStyle = 'rgba(200,120,255,.18)'; g.beginPath(); g.arc(x + X(17), y + 18, 5 + Math.sin(T * 18), 0, 7); g.fill(); }
     g.drawImage(shipC[(fly ? 1 : 0) + '' + fl], x, y);
-    // canopy hinge open
-    if (s.canopy > 0) { const cx = fl ? x + SW - 34 : x + 24, ch = Math.round(s.canopy * 4); g.fillStyle = nc('#24222e'); g.fillRect(cx, y + 5 - ch, 9, 3); g.fillStyle = 'rgba(138,144,176,.9)'; g.fillRect(cx + 2, y + 5 - ch, 3, 1); }
-    // pilot visible in cockpit while flying
-    if (TRV.st === 'pilot') { const px = fl ? x + SW - 30 : x + 27; R(px, y + 6, 3, 3, nc(CFV.suit[CF().suit][0])); R(px + (fl ? 0 : 1), y + 7, 2, 1, '#1c1730'); }
-    // thrusters
-    if (fly) { const ex = fl ? x + SW - 6 : x + 2, ey = y + 14, n = 6 + Math.round(Math.random() * 3) + (s.st === 'depart' || s.st === 'pass' ? 8 : 0);
-      for (let k = 0; k < n; k++) R(ex - (fl ? -k : k), ey + (k % 2), 1, 1, k < 2 ? '#ffffff' : k < 5 ? '#7fe0ff' : 'rgba(80,160,255,.5)');
-      if (s.st === 'liftoff' || s.st === 'descend') { const gx = x + 15; for (let k = 0; k < 5; k++) R(gx + rnd(-2, 2), y + SH + k, 3, 1, k < 2 ? '#ffffff' : 'rgba(127,224,255,.6)'); } }
-    // nav lights
-    if (Math.floor(T * 2) % 2) { R(fl ? x + SW - 3 : x + 2, y + 1, 1, 1, '#ff3030'); R(fl ? x + 1 : x + SW - 2, y + 12, 1, 1, '#30ff60'); }
+    // canopy glint sweep (3D sheen)
+    const gl = (T * .6) % 4; if (gl < 1) { const gx = 26 + Math.floor(gl * 12); for (let k = 0; k < 2; k++) R(x + X(gx + k), y + 7 + k, 1, 1, 'rgba(255,255,255,.55)'); }
+    // canopy opening
+    if (s.canopy > 0) { const ch = Math.round(s.canopy * 5); g.fillStyle = nc('#16161c'); g.fillRect(x + (fl ? SW - 38 : 26), y + 6 - ch, 12, 4); g.fillStyle = 'rgba(154,164,200,.9)'; g.fillRect(x + X(29), y + 6 - ch, 3, 1); }
+    if (TRV.st === 'pilot') { const px = x + X(31); R(px - 1, y + 8, 3, 3, nc(CFV.suit[CF().suit][0])); R(px + (fl ? -1 : 0), y + 9, 2, 1, '#1c1730'); }
+    if (fly && (s.st === 'liftoff' || s.st === 'descend')) for (let k = 0; k < 6; k++) R(x + X(17) + rnd(-2, 2), y + SH + k, 3, 1, k < 2 ? '#ffffff' : 'rgba(216,144,255,.6)');
+    if (Math.floor(T * 2) % 2) { R(x + X(2), y, 1, 1, '#ff3030'); R(x + X(45), y + 15, 1, 1, '#30ff60'); }
+    else R(x + X(44), y + 14, 1, 1, '#ffd040');
   }
   function drawTornado() {
     const bxp = W * .3 + Math.sin(T * .35) * W * .14, by = HY + 14, top = H * .06, n = 36; tornadoX = bxp;

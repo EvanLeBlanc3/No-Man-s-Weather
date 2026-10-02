@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NM Weather">
+<meta name="theme-color" content="#05060f">
+<title>No Man's Weather</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="scene"></canvas>
+<div id="vig"></div>
+<div id="fxFlash"></div>
+<div id="scanline"></div>
+<div id="crt"></div>
+
+<div id="app">
+  <header class="hud" id="hud">
+    <div class="hud-row">
+      <div class="sys">
+        <div class="tiny" id="sysLabel">EUCLID GALAXY</div>
+        <div class="planet" id="planetName">SCANNING…</div>
+        <div class="biome" id="biome">—</div>
+      </div>
+      <div class="pills">
+        <button class="pill btn" id="btnRefresh" aria-label="Refresh">⟳ SCAN</button>
+        <button class="pill btn" id="btnCfg" aria-label="Config">⚙ CONFIG</button>
+        <button class="pill btn fav" id="btnFav" aria-label="Favorite">☆ FAVORITE</button>
+        <div class="pill" id="netPill">BOOT</div>
+        <div class="pill dim" id="cdPill">AUTO --</div>
+      </div>
+    </div>
+
+    <div id="banner" class="banner hidden"></div>
+
+    <div class="hero-wrap">
+      <div class="hero">
+        <canvas id="heroIcon" width="16" height="16"></canvas>
+        <div class="hero-txt">
+          <div class="temp" id="temp">--°</div>
+          <div class="cond" id="cond">AWAITING SCAN</div>
+        </div>
+      </div>
+      <div class="sub-hero"><span id="feels"></span><span id="hilo"></span></div>
+      <div class="hazard">
+        <div class="hz-label"><span id="hzIcon">◆</span> HAZARD PROTECTION <span id="hzPct">100%</span></div>
+        <div class="hz-bar" id="hzBar"></div>
+      </div>
+      <div class="inv" id="inv"></div>
+      <div class="flavor" id="flavor">Initializing exosuit weather interface…</div>
+    </div>
+  </header>
+
+  <main id="panels">
+    <section class="panel">
+      <h2>FAVORITE PLANETS</h2>
+      <div class="sub">Tap to warp. ★ in the top corner (or below) saves where you are.</div>
+      <div id="favs"></div>
+      <button class="btn big" id="btnFavAdd" style="width:100%;margin-top:8px">★ SAVE CURRENT LOCATION</button>
+    </section>
+
+    <section class="panel alert-panel" id="pAlerts" hidden>
+      <h2>ATLAS TRANSMISSIONS (ALERTS)</h2>
+      <div id="alerts"></div>
+    </section>
+
+    <section class="panel">
+      <h2>NEXT HOUR</h2>
+      <div id="nextHour"></div>
+    </section>
+
+    <section class="panel">
+      <h2>EXOSUIT READOUT</h2>
+      <div id="readout" class="grid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>DAYLIGHT</h2>
+      <canvas id="sunArc" width="240" height="60"></canvas>
+      <div class="dl-big" id="dlLeft">--</div>
+      <div id="dlGrid" class="dl-grid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>NEXT 24 HOURS</h2>
+      <canvas id="chart" width="240" height="80"></canvas>
+      <div class="chart-legend" id="chartLegend"></div>
+      <div id="hourly" class="hscroll"></div>
+    </section>
+
+    <section class="panel">
+      <h2>10-DAY FORECAST</h2>
+      <div class="sub">Tap a day for a full scan.</div>
+      <div id="daily"></div>
+    </section>
+
+    <section class="panel">
+      <h2>PLANET DISCOVERY</h2>
+      <div id="discovery" class="grid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>WEATHER SIMULATOR</h2>
+      <div class="sub">Preview every hazard animation. Tap LIVE to return to reality.</div>
+      <div id="sim" class="chips"></div>
+      <div id="simTime" class="chips" style="margin-top:8px"></div>
+    </section>
+
+    <section class="panel">
+      <h2>SHIP SYSTEMS</h2>
+      <div class="sw" data-k="auto"><div><div class="sw-k">AUTO REFRESH</div><div class="sw-s" id="autoSub">Rescans every 60 seconds</div></div><div class="tog"></div></div>
+      <div class="sw" data-k="units"><div><div class="sw-k">UNITS</div><div class="sw-s" id="unitSub">°F · mph · inches</div></div><div class="tog"></div></div>
+      <div class="sw" data-k="sound"><div><div class="sw-k">SOUND FX</div><div class="sw-s">Bleeps, bloops, thunder</div></div><div class="tog"></div></div>
+      <div class="sw" data-k="ambient"><div><div class="sw-k">AMBIENT WEATHER AUDIO</div><div class="sw-s">Rain, wind, fire crackle…</div></div><div class="tog"></div></div>
+      <div class="sw" data-k="fx"><div><div class="sw-k">SCREEN FX</div><div class="sw-s">Shake, flashes, CRT scanlines</div></div><div class="tog"></div></div>
+      <div class="btn-row">
+        <button class="btn big" id="btnRefresh2">⟳ MANUAL SCAN</button>
+        <button class="btn big" id="btnLocate">◎ USE MY LOCATION</button>
+      </div>
+      <button class="btn big" id="btnCfg2" style="width:100%;margin-top:8px">⚙ TRAVELLER &amp; SENTINEL CONFIG</button>
+      <div class="search">
+        <input id="q" type="text" placeholder="Warp to a city…" autocomplete="off" autocorrect="off" spellcheck="false">
+        <button class="btn" id="qGo">WARP</button>
+      </div>
+      <div id="qRes"></div>
+    </section>
+
+    <footer>
+      <div id="lastScan">No scans yet</div>
+      <div class="credit">Weather data: Open-Meteo.com · US alerts: National Weather Service</div>
+      <div class="credit">Fan-made, unofficial, and powered by imagination. Not affiliated with Hello Games.</div>
+    </footer>
+  </main>
+</div>
+
+<div id="boot">
+  <div class="boot-inner">
+    <svg class="boot-atlas" viewBox="370 75 820 1410" aria-hidden="true"><polygon points="779,85 1178,610 782,1475 381,612" fill="#404040" stroke="#3a3a3a" stroke-width="8" stroke-linejoin="round"/><path d="M781,478 L781,812 A200,200 0 0 0 781,412 Z" fill="#b74a4f" class="orb"/><polygon points="779,90 1170,608 781,476" fill="#f7f7f7"/><g stroke="#fff" stroke-width="5" fill="none"><line x1="779" y1="92" x2="782" y2="1462"/><polyline points="388,611 780,477 1170,610"/><polyline points="388,614 780,742 1170,613"/></g></svg>
+    <div class="boot-title">NO MAN'S<br>WEATHER</div>
+    <div class="boot-sub">EXOSUIT ATMOSPHERIC INTERFACE v1.0</div>
+    <button class="btn big boot-btn" id="bootBtn">▶ INITIALIZE</button>
+    <div class="boot-log" id="bootLog"></div>
+  </div>
+</div>
+
+<div id="cfg">
+  <div class="cfg-head"><div><div class="tiny">EXOSUIT SUBSYSTEMS</div><div class="cfg-title">CONFIG</div></div><button class="btn" id="cfgClose">✕ DONE</button></div>
+  <div id="cfgBody"></div>
+  <div style="height:40px"></div>
+</div>
+
+<div id="rotate"><div class="rot-inner"><div class="rot-icon">▯</div>ROTATE BACK TO PORTRAIT,<br>TRAVELLER.<br><span>The Atlas only works upright.</span></div></div>
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

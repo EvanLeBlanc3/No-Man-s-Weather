@@ -1,14 +1,83 @@
-/* No Man's Weather — Hide UI add-on */
-#app{transition:transform .55s cubic-bezier(.6,0,.3,1),opacity .55s}
-#app.ui-hidden{transform:translateY(105%);opacity:0;pointer-events:none}
-.hide-btn{width:34px;height:24px;align-self:flex-end;font-size:12px;line-height:1;color:rgba(255,255,255,.75);
-  background:rgba(0,0,0,.22);border:1px solid rgba(255,255,255,.3);text-shadow:none;transition:transform .1s}
-.hide-btn:active,.hide-btn.pressed{transform:scale(.9);background:rgba(255,154,31,.5)}
-#btnShow{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 14px);z-index:9;width:58px;height:36px;margin-left:-29px;
-  color:rgba(255,255,255,.85);font-size:16px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.35);
-  opacity:0;transform:translateY(30px);pointer-events:none;transition:opacity .4s .35s,transform .4s .35s}
+/* No Man's Weather - Hide UI v2 */
+#app{
+  transition:transform .55s cubic-bezier(.6,0,.3,1),opacity .55s;
+}
+#app.ui-hidden{
+  transform:translateY(105%);
+  opacity:0;
+  pointer-events:none;
+}
+
+/* Down arrow beneath AUTO. Explicitly remove iOS button chrome. */
+.hide-btn{
+  -webkit-appearance:none;
+  appearance:none;
+  display:block;
+  width:34px;
+  height:24px;
+  padding:0;
+  margin:0;
+  align-self:flex-end;
+  font:inherit;
+  font-size:12px;
+  line-height:22px;
+  text-align:center;
+  color:rgba(255,255,255,.76);
+  background:rgba(0,0,0,.12) !important;
+  border:1px solid rgba(255,255,255,.22) !important;
+  border-radius:0;
+  box-shadow:none !important;
+  outline:none;
+  text-shadow:none;
+}
+.hide-btn:active,.hide-btn:focus,.hide-btn.pressed{
+  color:#fff;
+  background:rgba(0,0,0,.25) !important;
+  border-color:rgba(255,255,255,.4) !important;
+  box-shadow:none !important;
+}
+
+/* Up arrow shown while the UI is hidden. No orange background/border. */
+#btnShow{
+  -webkit-appearance:none;
+  appearance:none;
+  position:fixed;
+  left:50%;
+  bottom:calc(env(safe-area-inset-bottom) + 10px);
+  z-index:9;
+  width:58px;
+  height:36px;
+  padding:0;
+  margin-left:-29px;
+  font:inherit;
+  font-size:16px;
+  line-height:34px;
+  text-align:center;
+  color:rgba(255,255,255,.82);
+  background:rgba(0,0,0,.10) !important;
+  border:1px solid rgba(255,255,255,.20) !important;
+  border-radius:0;
+  box-shadow:none !important;
+  outline:none;
+  opacity:0;
+  transform:translateY(30px);
+  pointer-events:none;
+  transition:opacity .4s .35s,transform .4s .35s;
+}
 #btnShow span{display:inline-block;animation:nmwbob 1.6s ease-in-out infinite}
 @keyframes nmwbob{50%{transform:translateY(-4px)}}
 #btnShow.on{opacity:1;transform:none;pointer-events:auto}
-#btnShow.on.fade{opacity:.35}
-#btnShow:active{background:rgba(255,154,31,.5)}
+#btnShow.on.fade{opacity:.28}
+#btnShow:active,#btnShow:focus{
+  background:rgba(0,0,0,.20) !important;
+  border-color:rgba(255,255,255,.38) !important;
+  box-shadow:none !important;
+}
+
+/* Prevent the app's empty orange-bordered toast from peeking above the iPhone safe area. */
+#toast:empty:not(.show){
+  display:none !important;
+  border:0 !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}

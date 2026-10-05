@@ -16,7 +16,6 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
-<link rel="stylesheet" href="hideui.css">
 </head>
 <body>
 <canvas id="scene"></canvas>
@@ -39,6 +38,7 @@
         <button class="pill btn fav" id="btnFav" aria-label="Favorite">☆ FAVORITE</button>
         <div class="pill" id="netPill">BOOT</div>
         <div class="pill dim" id="cdPill">AUTO --</div>
+        <button class="hide-btn" id="btnHide" aria-label="Hide interface">▼</button>
       </div>
     </div>
 
@@ -63,12 +63,6 @@
   </header>
 
   <main id="panels">
-    <section class="panel">
-      <h2>FAVORITE PLANETS</h2>
-      <div class="sub">Tap to warp. ★ in the top corner (or below) saves where you are.</div>
-      <div id="favs"></div>
-      <button class="btn big" id="btnFavAdd" style="width:100%;margin-top:8px">★ SAVE CURRENT LOCATION</button>
-    </section>
 
     <section class="panel alert-panel" id="pAlerts" hidden>
       <h2>ATLAS TRANSMISSIONS (ALERTS)</h2>
@@ -105,6 +99,14 @@
       <div id="daily"></div>
     </section>
 
+    <section class="panel fav-panel collapsed" id="pFav">
+      <button class="fav-head" id="favHead"><h2>FAVORITE PLANETS <span id="favCount"></span></h2><span class="fav-chev">▸</span></button>
+      <div class="fav-body">
+        <div class="sub">Tap to warp. ☆ FAVORITE up top (or below) saves where you are.</div>
+        <div id="favs"></div>
+        <button class="btn big" id="btnFavAdd" style="width:100%;margin-top:8px">★ SAVE CURRENT LOCATION</button>
+      </div>
+    </section>
     <section class="panel">
       <h2>PLANET DISCOVERY</h2>
       <div id="discovery" class="grid"></div>
@@ -161,9 +163,9 @@
 </div>
 
 <div id="rotate"><div class="rot-inner"><div class="rot-icon">▯</div>ROTATE BACK TO PORTRAIT,<br>TRAVELLER.<br><span>The Atlas only works upright.</span></div></div>
+<button id="btnShow" aria-label="Show interface"><span>▲</span></button>
 <div id="toast"></div>
 
 <script src="app.js"></script>
-<script src="hideui.js"></script>
 </body>
 </html>
